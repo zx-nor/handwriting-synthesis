@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Handwriting Plotter for Bambu Lab A1</title>
+<style>
+:root{--bg:#f6f5f1;--fg:#1d1d1b;--mut:#6b6a64;--card:#fff;--bd:#d9d6cc;--ac:#2b4fd8;--acf:#fff;--ink:#1d1d1b;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17171a;--fg:#ecebe6;--mut:#9a9890;--card:#222226;--bd:#38383e;--ac:#7c9bff;--acf:#10131f;--ink:#ecebe6}}
+:root[data-theme="dark"]{--bg:#17171a;--fg:#ecebe6;--mut:#9a9890;--card:#222226;--bd:#38383e;--ac:#7c9bff;--acf:#10131f;--ink:#ecebe6}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1000px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:0 0 2px}p.s{color:var(--mut);margin:0 0 14px}
+.tabs{display:flex;gap:6px;margin-bottom:14px}
+button,select,input,textarea{font:inherit;color:var(--fg)}
+button{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:7px 12px;cursor:pointer}
+button.p{background:var(--ac);color:var(--acf);border-color:var(--ac)}button.on{border-color:var(--ac);color:var(--ac);font-weight:600}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px}
+.row{display:flex;gap:14px;flex-wrap:wrap}.col{flex:1;min-width:290px}
+.big{font-size:56px;line-height:1;font-family:Georgia,serif;margin:0 8px}
+#pad{border:1px solid var(--bd);border-radius:10px;touch-action:none;background:var(--card);max-width:100%;cursor:crosshair}
+.grid{display:flex;flex-wrap:wrap;gap:4px;margin-top:10px}.grid button{width:36px;padding:4px 0;font-size:14px}
+.grid button.done{background:var(--ac);color:var(--acf);border-color:var(--ac)}.grid button.cur{outline:2px solid var(--ac)}
+label.f{display:grid;grid-template-columns:1fr 84px;gap:6px;align-items:center;margin:5px 0;font-size:13px}
+label.f input,label.f select{width:100%;background:var(--bg);border:1px solid var(--bd);border-radius:6px;padding:4px 6px}
+textarea{width:100%;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:8px}
+.warn{color:#c2410c;font-size:13px}.mut{color:var(--mut);font-size:13px}
+#prev{width:100%;height:auto;border:1px solid var(--bd);border-radius:6px;background:#fff}
+h3{margin:12px 0 4px;font-size:14px}
+.chk{display:inline-flex;gap:5px;margin-right:12px;align-items:center}
+</style></head><body><main>
+<h1>✍️ Handwriting Plotter</h1>
+<p class="s">Teach it your handwriting, then generate G-code for a pen on your Bambu Lab A1.</p>
+<div class="tabs"><button id="t1" class="on">1 · Train</button><button id="t2">2 · Write &amp; export</button></div>
+
+<section id="v1"><div class="row">
+ <div class="col card">
+  <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
+   <span class="mut">Draw</span><span class="big" id="cur">a</span><span class="mut" id="cnt"></span>
+  </div>
+  <canvas id="pad"></canvas>
+  <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+   <button class="p" id="save">Save sample ✓</button><button id="undo">Undo stroke</button><button id="clr">Clear</button><button id="prv">← Back</button><button id="skp">Skip →</button>
+  </div>
+  <p class="mut">Write between the guide lines: the middle band is the x-height, the lower solid line is the baseline. Use natural, normal-size writing.</p>
+ </div>
+ <div class="col card">
+  <h3 style="margin-top:0">Characters to train</h3>
+  <div id="sets"></div>
+  <label class="f" style="margin-top:8px">Samples per character<input type="number" id="nsmp" min="1" max="8"></label>
+  <div class="grid" id="grid"></div>
+  <p class="mut" id="prog"></p>
+  <button id="rst">Delete all samples</button>
+  <p class="mut">How it works: strokes of each sample are resampled to equal spacing and aligned, then every time a letter is written, a fresh random blend of your samples is made, plus smooth wobble, tilt and size drift. No two letters are identical and none is an exact copy. Samples are stored in this browser only.</p>
+ </div>
+</div></section>
+
+<section id="v2" hidden><div class="row">
+ <div class="col" style="flex:1.4">
+  <div class="card">
+   <textarea id="txt" rows="5">the quick brown fox jumps over the lazy dog</textarea>
+   <div style="display:flex;gap:6px;margin:8px 0;flex-wrap:wrap">
+    <button id="roll">🎲 Re-roll variation</button><button id="anim">▶ Animate pen</button>
+    <label class="chk mut"><input type="checkbox" id="trv"> show pen travel</label>
+   </div>
+   <canvas id="prev"></canvas>
+   <p class="warn" id="msg"></p><p class="mut" id="stat"></p>
+  </div>
+  <div class="card" style="margin-top:12px">
+   <button class="p" id="dl">Download .gcode</button>
+   <details style="margin-top:8px"><summary class="mut">View G-code</summary><textarea id="gc" rows="10" readonly></textarea></details>
+   <p class="mut">Load the file in a G-code sender that accepts raw files, or paste it into a custom G-code block in Bambu Studio. Test first with the pen well above the paper (raise Pen-up Z) and a dry run. The nozzle stays cold; no filament moves are generated.</p>
+  </div>
+ </div>
+ <div class="col card" id="set"></div>
+</div></section>
+</main>
+<script>
+const $=s=>document.querySelector(s),CH={lower:'abcdefghijklmnopqrstuvwxyz',upper:'ABCDEFGHIJKLMNOPQRSTUVWXYZ',digits:'0123456789',punct:'.,!?\'-:;()"'};
+const PAGES={'A5 (148×210)':[148,210],'A6 (105×148)':[105,148],'Square (200×200)':[200,200],'Index card (76×127)':[76,127]};
+const D={sets:{lower:1,upper:0,digits:0,punct:0},n:3,samples:{},cfg:{page:'A5 (148×210)',margin:12,xh:3.2,lh:3.4,ls:.2,ws:.9,mess:1,slant:0,pw:.5,seed:1,upz:3,dnz:0,ox:54,oy:23,px:0,py:0,df:2400,tf:6000}};
+let st=JSON.parse(JSON.stringify(D));
+try{const s=JSON.parse(localStorage.getItem('hwplot1'));if(s){st={...D,...s,cfg:{...D.cfg,...s.cfg}}}}catch(e){}
+const save=()=>{try{localStorage.setItem('hwplot1',JSON.stringify(st))}catch(e){}};
+const chars=()=>Object.keys(st.sets).filter(k=>st.sets[k]).map(k=>CH[k]).join('').split('');
+let idx=0,G={};
+// ---------- tabs
+function tab(n){$('#v1').hidden=n!=1;$('#v2').hidden=n!=2;$('#t1').className=n==1?'on':'';$('#t2').className=n==2?'on':'';if(n==2)gen()}
+$('#t1').onclick=()=>tab(1);$('#t2').onclick=()=>tab(2);
+// ---------- training pad
+const cv=$('#pad'),cx=cv.getContext('2d'),W=320,H=360,XH=80,BL=240,dpr=window.devicePixelRatio||1;
+cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';
+let strokes=[],cs=null;
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function drawPad(){cx.setTransform(dpr,0,0,dpr,0,0);cx.clearRect(0,0,W,H);
+ const L=(y,c,d)=>{cx.beginPath();cx.setLineDash(d||[]);cx.strokeStyle=c;cx.lineWidth=1;cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke()};
+ cx.fillStyle='rgba(120,140,255,.08)';cx.fillRect(0,BL-XH,W,XH);
+ L(BL-2*XH,css('--bd'),[4,4]);L(BL-XH,css('--bd'),[4,4]);L(BL,css('--mut'));L(BL+XH,css('--bd'),[4,4]);cx.setLineDash([]);
+ cx.strokeStyle=css('--ink');cx.lineWidth=3;cx.lineCap=cx.lineJoin='round';
+ strokes.forEach(s=>{cx.beginPath();s.forEach((p,i)=>i?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1]));if(s.length==1)cx.lineTo(s[0][0]+.1,s[0][1]);cx.stroke()})}
+const pt=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left)*W/r.width,(e.clientY-r.top)*H/r.height]};
+cv.onpointerdown=e=>{cv.setPointerCapture(e.pointerId);cs=[pt(e)];strokes.push(cs);drawPad()};
+cv.onpointermove=e=>{if(cs){cs.push(pt(e));drawPad()}};
+cv.onpointerup=cv.onpointercancel=()=>{cs=null};
+$('#undo').onclick=()=>{strokes.pop();drawPad()};$('#clr').onclick=()=>{strokes=[];drawPad()};
+function go(i){const c=chars();if(!c.length)return;idx=(i+c.length)%c.length;strokes=[];drawPad();ui()}
+$('#prv').onclick=()=>go(idx-1);$('#skp').onclick=()=>go(idx+1);
+$('#save').onclick=()=>{if(!strokes.length)return;const c=chars()[idx];
+ (st.samples[c]=st.samples[c]||[]).push(strokes.map(s=>s.map(p=>[p[0]/XH,(BL-p[1])/XH])));delete G[c];save();
+ const ch=chars(),n=(i)=>(st.samples[ch[i]]||[]).length;let nx=idx;
+ if(n(idx)>=st.n){for(let k=1;k<=ch.length;k++){const j=(idx+k)%ch.length;if(n(j)<st.n){nx=j;break}}}
+ go(nx)};
+$('#rst').onclick=()=>{if(confirm('Delete every saved sample?')){st.samples={};G={};save();go(0)}};
+$('#nsmp').onchange=e=>{st.n=Math.max(1,Math.min(8,+e.target.value||3));save();ui()};
+function ui(){const ch=chars(),c=ch[idx]||'';$('#cur').textContent=c;
+ const k=(st.samples[c]||[]).length;$('#cnt').textContent=c?`sample ${k+1} (${k}/${st.n} saved)`:'';
+ $('#nsmp').value=st.n;
+ $('#grid').innerHTML='';let done=0;ch.forEach((x,i)=>{const n=(st.samples[x]||[]).length,b=document.createElement('button');b.textContent=x;
+  if(n>=st.n){b.className='done';done++}if(i==idx)b.className+=' cur';b.onclick=()=>go(i);$('#grid').appendChild(b)});
+ $('#prog').textContent=`${done} of ${ch.length} characters complete`}
+$('#sets').innerHTML=Object.entries({lower:'a–z',upper:'A–Z',digits:'0–9',punct:'Punctuation'}).map(([k,l])=>`<label class="chk"><input type="checkbox" data-k="${k}" ${st.sets[k]?'checked':''}>${l}</label>`).join('');
+$('#sets').onchange=e=>{st.sets[e.target.dataset.k]=e.target.checked?1:0;save();go(0)};
+// ---------- glyph model: align + average + random blend
+function rs(p,N){const d=[0];for(let i=1;i<p.length;i++)d[i]=d[i-1]+Math.hypot(p[i][0]-p[i-1][0],p[i][1]-p[i-1][1]);const L=d[d.length-1],o=[];
+ if(L<1e-6){for(let i=0;i<N;i++)o.push(p[0].slice());return o}
+ let j=0;for(let i=0;i<N;i++){const t=L*i/(N-1);while(j<p.length-2&&d[j+1]<t)j++;const u=(t-d[j])/(d[j+1]-d[j]||1);o.push([p[j][0]+(p[j+1][0]-p[j][0])*u,p[j][1]+(p[j+1][1]-p[j][1])*u])}return o}
+const cen=s=>[s.reduce((a,p)=>a+p[0],0)/s.length,s.reduce((a,p)=>a+p[1],0)/s.length];
+function build(ch){const ss=st.samples[ch];if(!ss||!ss.length)return null;const cnt={};ss.forEach(s=>cnt[s.length]=(cnt[s.length]||0)+1);
+ const m=+Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]||a-b)[0];
+ let use=ss.filter(s=>s.length==m).map(s=>{let mn=1e9,mx=-1e9;s.forEach(k=>k.forEach(p=>{mn=Math.min(mn,p[0]);mx=Math.max(mx,p[0])}));
+  return{w:mx-mn,st:s.map(k=>rs(k.map(p=>[p[0]-mn,p[1]]),40))}});
+ const ref=use[0].st.map(cen);
+ use=use.map((u,i)=>{if(!i)return u;const pool=u.st.map((s,j)=>({s,c:cen(s)})),o=[];
+  ref.forEach(rc=>{let b=0,bd=1e9;pool.forEach((q,j)=>{const d=Math.hypot(q.c[0]-rc[0],q.c[1]-rc[1]);if(d<bd){bd=d;b=j}});o.push(pool.splice(b,1)[0].s)});return{w:u.w,st:o}});
+ return{use}}
+function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const mkN=r=>{const a=[[r()*6.28,2+r()*3],[r()*6.28,4+r()*4]];return t=>Math.sin(a[0][0]+t*a[0][1])*.65+Math.sin(a[1][0]+t*a[1][1])*.35};
+function glyph(ch,r,j){const g=G[ch]||(G[ch]=build(ch));if(!g)return null;
+ let wt=g.use.map(()=>.35-Math.log(1-r()+1e-9));const sm=wt.reduce((a,b)=>a+b,0);wt=wt.map(x=>x/sm);
+ const w0=g.use.reduce((a,u,i)=>a+u.w*wt[i],0),nx=mkN(r),ny=mkN(r),amp=.03*j,rot=(r()-.5)*.1*j,sc=1+(r()-.5)*.12*j,cr=Math.cos(rot),sr=Math.sin(rot);
+ const out=g.use[0].st.map((s0,si)=>s0.map((_,k)=>{let x=0,y=0;g.use.forEach((u,i)=>{x+=u.st[si][k][0]*wt[i];y+=u.st[si][k][1]*wt[i]});
+  const t=k/39;x+=amp*nx(t);y+=amp*ny(t);const dx=x-w0/2,dy=y-.5;return[(w0/2+dx*cr-dy*sr)*sc,(.5+dx*sr+dy*cr)*sc]}));
+ return{s:out,w:w0*sc}}
+// ---------- layout
+function layout(text,c){const r=rng(c.seed),[PW,PH]=PAGES[c.page],xh=c.xh,j=c.mess,sl=Math.tan(c.slant*Math.PI/180),maxW=(PW-2*c.margin)/xh,miss=new Set(),out=[];
+ let y=c.margin+2*xh,over=false;
+ const word=w=>{let x=0;const gs=[];for(const ch of w){const g=glyph(ch,r,j);if(!g){if(ch.trim())miss.add(ch);x+=.5;continue}gs.push({s:g.s,x});x+=g.w+c.ls*(1+(r()-.5)*.8*j)}return{gs,w:Math.max(x-c.ls,0)}};
+ const flush=line=>{if(y>PH-c.margin){over=true;return}const slope=(r()-.5)*.012*j;let xp=0;
+  line.forEach(wd=>{const by=y+slope*xp*xh+(r()-.5)*.1*xh*j;
+   wd.gs.forEach(g=>g.s.forEach(s=>out.push(s.map(p=>[c.margin+(xp+g.x+p[0]+sl*p[1])*xh,by-p[1]*xh]))));xp+=wd.w+c.ws*(1+(r()-.5)*.5*j)});
+  y+=c.lh*xh};
+ text.split('\n').forEach(par=>{if(over)return;let line=[],lw=0;
+  par.split(/ +/).filter(Boolean).forEach(w=>{const wd=word(w),add=(line.length?c.ws:0)+wd.w;if(line.length&&lw+add>maxW){flush(line);line=[];lw=0}line.push(wd);lw+=(line.length>1?c.ws:0)+wd.w});
+  if(line.length)flush(line);else y+=c.lh*xh});
+ return{out,miss:[...miss],over,PW,PH}}
+// ---------- settings UI
+const F=[['page','Paper size',0],['margin','Margin (mm)',0,2,40,1],['xh','Letter height / x-height (mm)',0,1.5,8,.1],['lh','Line spacing (× height)',0,2.5,6,.1],['ls','Letter spacing',0,0,.8,.02],['ws','Word spacing',0,.4,2,.05],['mess','Messiness (0 = clean)',0,0,2.5,.1],['slant','Slant (°)',0,-20,30,1],['pw','Pen width (preview mm)',0,.2,1.5,.05],
+ ['H','Printer / pen'],['upz','Pen-up Z (mm)',0,0,30,.1],['dnz','Pen-down Z (mm)',0,-5,10,.05],['ox','Paper front-left X on bed',0,0,256,1],['oy','Paper front-left Y on bed',0,0,256,1],['px','Pen offset X from nozzle',0,-60,60,.1],['py','Pen offset Y from nozzle',0,-60,60,.1],['df','Draw speed (mm/min)',0,200,6000,100],['tf','Travel speed (mm/min)',0,1000,12000,500]];
+$('#set').innerHTML=F.map(f=>f[0]=='H'?`<h3>${f[1]}</h3>`:f[0]=='page'?`<h3 style="margin-top:0">Page &amp; style</h3><label class="f">${f[1]}<select data-k="page">${Object.keys(PAGES).map(p=>`<option>${p}</option>`).join('')}</select></label>`:
+ `<label class="f">${f[1]}<input type="number" data-k="${f[0]}" min="${f[3]}" max="${f[4]}" step="${f[5]}"></label>`).join('');
+document.querySelectorAll('#set [data-k]').forEach(el=>{el.value=st.cfg[el.dataset.k];el.onchange=()=>{const k=el.dataset.k;st.cfg[k]=k=='page'?el.value:+el.value;
+ if(k=='page'){const[w,h]=PAGES[el.value];st.cfg.ox=Math.round((256-w)/2);st.cfg.oy=Math.round((256-h)/2);document.querySelector('[data-k=ox]').value=st.cfg.ox;document.querySelector('[data-k=oy]').value=st.cfg.oy}save();gen()}});
+$('#txt').oninput=()=>gen();$('#trv').onchange=()=>draw(1);$('#roll').onclick=()=>{st.cfg.seed=Math.floor(Math.random()*1e6);save();gen()};
+// ---------- preview + gcode
+let R=null,anim=0;const pc=$('#prev');
+function draw(f){if(!R)return;const sc=Math.min(900,Math.max(520,R.PW*5))/R.PW;pc.width=R.PW*sc;pc.height=R.PH*sc;const x=pc.getContext('2d');
+ x.fillStyle='#fff';x.fillRect(0,0,pc.width,pc.height);x.strokeStyle='#e6e3da';x.setLineDash([4,4]);const m=st.cfg.margin*sc;x.strokeRect(m,m,pc.width-2*m,pc.height-2*m);x.setLineDash([]);
+ const tot=R.out.reduce((a,s)=>a+s.length,0);let left=Math.floor(tot*f),prev=null;
+ x.lineCap=x.lineJoin='round';
+ for(const s of R.out){if(left<=0)break;
+  if($('#trv').checked&&prev){x.strokeStyle='rgba(200,60,60,.35)';x.lineWidth=1;x.setLineDash([3,3]);x.beginPath();x.moveTo(prev[0]*sc,prev[1]*sc);x.lineTo(s[0][0]*sc,s[0][1]*sc);x.stroke();x.setLineDash([])}
+  x.strokeStyle='#1c2f8f';x.lineWidth=Math.max(1,st.cfg.pw*sc);x.beginPath();
+  const n=Math.min(left,s.length);for(let i=0;i<n;i++)i?x.lineTo(s[i][0]*sc,s[i][1]*sc):x.moveTo(s[i][0]*sc,s[i][1]*sc);if(n==1)x.lineTo(s[0][0]*sc+.1,s[0][1]*sc);x.stroke();left-=s.length;prev=s[s.length-1]}}
+function gcode(){const c=st.cfg,f=v=>v.toFixed(2);let L=['; Handwriting plot, Bambu Lab A1 pen','M104 S0 ; nozzle off','M140 S0 ; bed off','G90','G28 ; home','G1 Z'+f(c.upz+5)+' F3000'],
+ lo=[1e9,1e9],hi=[-1e9,-1e9],dist=0,trv=0,cur=null,mv=p=>{const X=c.ox+p[0]-c.px,Y=c.oy+(R.PH-p[1])-c.py;lo=[Math.min(lo[0],X),Math.min(lo[1],Y)];hi=[Math.max(hi[0],X),Math.max(hi[1],Y)];return[X,Y]};
+ R.out.forEach(s=>{const pts=[s[0]];s.forEach(p=>{const q=pts[pts.length-1];if(Math.hypot(p[0]-q[0],p[1]-q[1])>.08)pts.push(p)});if(pts.length==1)pts.push([pts[0][0]+.05,pts[0][1]]);
+  const a=mv(pts[0]);if(cur)trv+=Math.hypot(a[0]-cur[0],a[1]-cur[1]);
+  L.push('G1 Z'+f(c.upz)+' F3000','G0 X'+f(a[0])+' Y'+f(a[1])+' F'+c.tf,'G1 Z'+f(c.dnz)+' F1200');cur=a;
+  for(let i=1;i<pts.length;i++){const b=mv(pts[i]);dist+=Math.hypot(b[0]-cur[0],b[1]-cur[1]);L.push('G1 X'+f(b[0])+' Y'+f(b[1])+' F'+c.df);cur=b}});
+ L.push('G1 Z'+f(c.upz+10)+' F3000','G0 X10 Y240 F'+c.tf,'M400','M84');
+ return{g:L.join('\n'),lo,hi,min:(dist/c.df+trv/c.tf)}}
+function gen(){if(!Object.keys(st.samples).length){$('#msg').textContent='No samples yet. Train some letters first.';R=null;pc.width=pc.height=1;return}
+ G={};R=layout($('#txt').value,st.cfg);draw(1);const gr=gcode();$('#gc').value=gr.g;let m=[];
+ if(R.miss.length)m.push('No samples for: '+R.miss.join(' ')+' (skipped)');if(R.over)m.push('Text doesn’t fit on the page; the rest was cut.');
+ if(gr.lo[0]<0||gr.lo[1]<0||gr.hi[0]>256||gr.hi[1]>256)m.push('Toolpath leaves the 256×256 mm bed. Adjust paper origin or size.');
+ $('#msg').textContent=m.join(' ');$('#stat').textContent=`${R.out.length} strokes · about ${Math.ceil(gr.min)} min · ${gr.g.split('\n').length} lines of G-code · variation seed ${st.cfg.seed}`}
+$('#anim').onclick=()=>{if(!R)return;cancelAnimationFrame(anim);let t0=performance.now();const step=t=>{const f=Math.min(1,(t-t0)/6000);draw(f);if(f<1)anim=requestAnimationFrame(step)};anim=requestAnimationFrame(step)};
+$('#dl').onclick=async()=>{if(!R)return gen();let ok=false;const CP=window.Capacitor&&window.Capacitor.Plugins;if(CP&&CP.Filesystem&&CP.Share){try{const w=await CP.Filesystem.writeFile({path:'handwriting.gcode',data:$('#gc').value,directory:'CACHE',encoding:'utf8'});await CP.Share.share({title:'handwriting.gcode',url:w.uri});return}catch(e){}}try{const d=await claude.use('downloads');if(d){await d.save({filename:'handwriting.gcode',data:$('#gc').value});ok=true}}catch(e){}
+ if(!ok){$('#gc').closest('details').open=true;$('#gc').select();$('#msg').textContent='Download isn’t available here. Copy the G-code from the box below and save it as a .gcode file.'}};
+go(0);
+</script></body></html>
